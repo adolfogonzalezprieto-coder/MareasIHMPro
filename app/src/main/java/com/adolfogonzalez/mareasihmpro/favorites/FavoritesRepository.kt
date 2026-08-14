@@ -1,14 +1,19 @@
 package com.adolfogonzalez.mareasihmpro.favorites
 
 import android.content.Context
-import androidx.datastore.preferences.core.*
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import org.json.JSONArray
 import org.json.JSONObject
 
-private val Context.favoritesDataStore by preferencesDataStore(
+private val Context.favoritesDataStore: DataStore<Preferences> by preferencesDataStore(
     name = "mareas_favorites"
 )
 
@@ -25,267 +30,227 @@ class FavoritesRepository(
     private val context: Context
 ) {
 
-    companion object {
-
-        private val FAVORITES =
-            stringPreferencesKey("favorites")
-
-        private val DEFAULT_FAVORITE =
-            stringPreferencesKey("default_favorite")
-
-        private val LAST_LOCATION =
-            stringPreferencesKey("last_location")
-
-        private val USE_GPS =
-            booleanPreferencesKey("use_gps")
+    private companion object {
+        val FAVORITES = stringPreferencesKey("favorites")
+        val DEFAULT_FAVORITE = stringPreferencesKey("default_favorite")
+        val LAST_LOCATION = stringPreferencesKey("last_location")
+        val USE_GPS = booleanPreferencesKey("use_gps")
     }
 
     val favorites: Flow<List<FavoriteLocation>> =
-        context.favoritesDataStore.data.map { prefs ->
+        context.favoritesDataStore.data.map { preferences ->
+            val defaultId = preferences[DEFAULT_FAVORITE]
+            val json = preferences[FAVORITES] ?: "[]"
 
-            val json =
-                prefs[FAVORITES] ?: "[]"
-
-            decodeFavorites(json)
+            decodeFavorites(json).map { favorite ->
+                favorite.copy(isDefault = favorite.id == defaultId)
+            }
         }
 
     val defaultFavoriteId: Flow<String?> =
-        context.favoritesDataStore.data.map {
-            it[DEFAULT_FAVORITE]
+        context.favoritesDataStore.data.map { preferences ->
+            preferences[DEFAULT_FAVORITE]
         }
 
     val lastLocationId: Flow<String?> =
-        context.favoritesDataStore.data.map {
-            it[LAST_LOCATION]
+        context.favoritesDataStore.data.map { preferences ->
+            preferences[LAST_LOCATION]
         }
 
     val useGps: Flow<Boolean> =
-        context.favoritesDataStore.data.map {
-            it[USE_GPS] ?: true
+        context.favoritesDataStore.data.map { preferences ->
+            preferences[USE_GPS] ?: true
         }
 
-    suspend fun addFavorite(
-        favorite: FavoriteLocation
-    ) {
+    suspend fun addFavorite(favorite: FavoriteLocation) {
+        val current = getFavoritesOnce().toMutableList()
+        val existingIndex = current.indexOfFirst { item ->
+            item.id == favorite.id
+        }
 
-        val current =
-            getFavoritesOnce().toMutableList()
-
-        if (current.none { it.id == favorite.id }) {
-            current.add(favorite)
+        if (existingIndex >= 0) {
+            current[existingIndex] = favorite.copy(isDefault = false)
+        } else {
+            current.add(favorite.copy(isDefault = false))
         }
 
         saveFavorites(current)
+
+        if (favorite.isDefault) {
+            setDefaultFavorite(favorite.id)
+        }
     }
 
-    suspend fun removeFavorite(
-        favoriteId: String
-    ) {
-
-        val current =
-            getFavoritesOnce()
-                .filterNot {
-                    it.id == favoriteId
-                }
+    suspend fun removeFavorite(favoriteId: String) {
+        val current = getFavoritesOnce().filterNot { favorite ->
+            favorite.id == favoriteId
+        }
 
         saveFavorites(current)
 
-        context.favoritesDataStore.edit {
-
-            if (
-                it[DEFAULT_FAVORITE]
-                == favoriteId
-            ) {
-                it.remove(DEFAULT_FAVORITE)
+        context.favoritesDataStore.edit { preferences ->
+            if (preferences[DEFAULT_FAVORITE] == favoriteId) {
+                preferences.remove(DEFAULT_FAVORITE)
             }
 
-            if (
-                it[LAST_LOCATION]
-                == favoriteId
-            ) {
-                it.remove(LAST_LOCATION)
+            if (preferences[LAST_LOCATION] == favoriteId) {
+                preferences.remove(LAST_LOCATION)
             }
         }
     }
 
-    suspend fun updateFavorite(
-        favorite: FavoriteLocation
-    ) {
-
-        val current =
-            getFavoritesOnce()
-                .toMutableList()
-
-        val index =
-            current.indexOfFirst {
-                it.id == favorite.id
-            }
+    suspend fun updateFavorite(favorite: FavoriteLocation) {
+        val current = getFavoritesOnce().toMutableList()
+        val index = current.indexOfFirst { item ->
+            item.id == favorite.id
+        }
 
         if (index >= 0) {
-            current[index] = favorite
+            current[index] = favorite.copy(isDefault = false)
             saveFavorites(current)
+
+            if (favorite.isDefault) {
+                setDefaultFavorite(favorite.id)
+            }
         }
     }
 
-    suspend fun setDefaultFavorite(
-        favoriteId: String
-    ) {
+    suspend fun setDefaultFavorite(favoriteId: String) {
+        val favoriteExists = getFavoritesOnce().any { favorite ->
+            favorite.id == favoriteId
+        }
 
-        context.favoritesDataStore.edit {
+        if (!favoriteExists) {
+            return
+        }
 
-            it[DEFAULT_FAVORITE] =
-                favoriteId
+        context.favoritesDataStore.edit { preferences ->
+            preferences[DEFAULT_FAVORITE] = favoriteId
         }
     }
 
-    suspend fun setLastLocation(
-        favoriteId: String
-    ) {
-
-        context.favoritesDataStore.edit {
-
-            it[LAST_LOCATION] =
-                favoriteId
+    suspend fun clearDefaultFavorite() {
+        context.favoritesDataStore.edit { preferences ->
+            preferences.remove(DEFAULT_FAVORITE)
         }
     }
 
-    suspend fun setUseGps(
-        enabled: Boolean
-    ) {
+    suspend fun setLastLocation(favoriteId: String) {
+        context.favoritesDataStore.edit { preferences ->
+            preferences[LAST_LOCATION] = favoriteId
+        }
+    }
 
-        context.favoritesDataStore.edit {
+    suspend fun clearLastLocation() {
+        context.favoritesDataStore.edit { preferences ->
+            preferences.remove(LAST_LOCATION)
+        }
+    }
 
-            it[USE_GPS] =
-                enabled
+    suspend fun setUseGps(enabled: Boolean) {
+        context.favoritesDataStore.edit { preferences ->
+            preferences[USE_GPS] = enabled
         }
     }
 
     suspend fun getDefaultFavorite(): FavoriteLocation? {
+        val preferences = context.favoritesDataStore.data.first()
+        val favoriteId = preferences[DEFAULT_FAVORITE] ?: return null
 
-        val favoriteId =
-            context.favoritesDataStore.data
-                .map {
-                    it[DEFAULT_FAVORITE]
-                }
-                .firstOrNull()
-
-        return getFavoritesOnce()
-            .firstOrNull {
-                it.id == favoriteId
+        return decodeFavorites(preferences[FAVORITES] ?: "[]")
+            .firstOrNull { favorite ->
+                favorite.id == favoriteId
             }
+            ?.copy(isDefault = true)
     }
 
-    suspend fun getFavoritesOnce():
-            List<FavoriteLocation> {
+    suspend fun getLastLocation(): FavoriteLocation? {
+        val preferences = context.favoritesDataStore.data.first()
+        val favoriteId = preferences[LAST_LOCATION] ?: return null
+        val defaultId = preferences[DEFAULT_FAVORITE]
 
-        val prefs =
-            context.favoritesDataStore.data
-                .map {
-                    it[FAVORITES] ?: "[]"
-                }
-                .firstOrNull()
-                ?: "[]"
-
-        return decodeFavorites(prefs)
+        return decodeFavorites(preferences[FAVORITES] ?: "[]")
+            .firstOrNull { favorite ->
+                favorite.id == favoriteId
+            }
+            ?.copy(isDefault = favoriteId == defaultId)
     }
 
-    private suspend fun saveFavorites(
-        favorites: List<FavoriteLocation>
-    ) {
+    suspend fun getFavoritesOnce(): List<FavoriteLocation> {
+        val preferences = context.favoritesDataStore.data.first()
+        val json = preferences[FAVORITES] ?: "[]"
+        val defaultId = preferences[DEFAULT_FAVORITE]
 
-        context.favoritesDataStore.edit {
-
-            it[FAVORITES] =
-                encodeFavorites(favorites)
+        return decodeFavorites(json).map { favorite ->
+            favorite.copy(isDefault = favorite.id == defaultId)
         }
     }
 
-    private fun encodeFavorites(
-        favorites: List<FavoriteLocation>
-    ): String {
+    suspend fun clearAllFavorites() {
+        context.favoritesDataStore.edit { preferences ->
+            preferences.remove(FAVORITES)
+            preferences.remove(DEFAULT_FAVORITE)
+            preferences.remove(LAST_LOCATION)
+        }
+    }
 
+    private suspend fun saveFavorites(favorites: List<FavoriteLocation>) {
+        val normalizedFavorites = favorites.map { favorite ->
+            favorite.copy(isDefault = false)
+        }
+
+        context.favoritesDataStore.edit { preferences ->
+            preferences[FAVORITES] = encodeFavorites(normalizedFavorites)
+        }
+    }
+
+    private fun encodeFavorites(favorites: List<FavoriteLocation>): String {
         val array = JSONArray()
 
         favorites.forEach { favorite ->
+            val item = JSONObject()
+            item.put("id", favorite.id)
+            item.put("name", favorite.name)
+            item.put("latitude", favorite.latitude)
+            item.put("longitude", favorite.longitude)
 
-            val obj = JSONObject()
+            if (favorite.ihmStationId != null) {
+                item.put("ihmStationId", favorite.ihmStationId)
+            }
 
-            obj.put(
-                "id",
-                favorite.id
-            )
-
-            obj.put(
-                "name",
-                favorite.name
-            )
-
-            obj.put(
-                "latitude",
-                favorite.latitude
-            )
-
-            obj.put(
-                "longitude",
-                favorite.longitude
-            )
-
-            obj.put(
-                "ihmStationId",
-                favorite.ihmStationId
-            )
-
-            array.put(obj)
+            array.put(item)
         }
 
         return array.toString()
     }
 
-    private fun decodeFavorites(
-        json: String
-    ): List<FavoriteLocation> {
-
+    private fun decodeFavorites(json: String): List<FavoriteLocation> {
         return try {
+            val array = JSONArray(json)
+            val result = mutableListOf<FavoriteLocation>()
 
-            val array =
-                JSONArray(json)
-
-            buildList {
-
-                for (
-                    i in 0 until array.length()
-                ) {
-
-                    val item =
-                        array.getJSONObject(i)
-
-                    add(
-                        FavoriteLocation(
-                            id =
-                                item.getString("id"),
-
-                            name =
-                                item.getString("name"),
-
-                            latitude =
-                                item.getDouble("latitude"),
-
-                            longitude =
-                                item.getDouble("longitude"),
-
-                            ihmStationId =
-                                item.optString(
-                                    "ihmStationId",
-                                    null
-                                )
-                        )
-                    )
+            for (index in 0 until array.length()) {
+                val item = array.getJSONObject(index)
+                val stationId = if (item.has("ihmStationId") && !item.isNull("ihmStationId")) {
+                    item.getString("ihmStationId")
+                } else {
+                    null
                 }
+
+                result.add(
+                    FavoriteLocation(
+                        id = item.getString("id"),
+                        name = item.getString("name"),
+                        latitude = item.getDouble("latitude"),
+                        longitude = item.getDouble("longitude"),
+                        ihmStationId = stationId,
+                        isDefault = false
+                    )
+                )
             }
 
-        } catch (
-            _: Exception
-        ) {
+            result
+        } catch (_: Exception) {
             emptyList()
         }
     }
