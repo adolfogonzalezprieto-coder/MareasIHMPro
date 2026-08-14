@@ -1,0 +1,33 @@
+name: Generar Mareas IHM Pro
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - name: Compilar APK instalable
+        run: gradle :app:assembleDebug --stacktrace
+      - name: Renombrar APK
+        run: cp app/build/outputs/apk/debug/*.apk Mareas-IHM-Pro-11.0.0.apk
+      - name: Compilar App Bundle para Google Play
+        run: gradle :app:bundleRelease --stacktrace
+      - name: Subir APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mareas-IHM-Pro-APK
+          path: Mareas-IHM-Pro-11.0.0.apk
+      - name: Subir AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mareas-IHM-Pro-AAB-SIN-FIRMAR
+          path: app/build/outputs/bundle/release/*.aab
