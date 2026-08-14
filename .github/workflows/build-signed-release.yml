@@ -1,0 +1,32 @@
+name: Build signed release
+on:
+  workflow_dispatch:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+      - run: gradle :app:assembleRelease :app:bundleRelease --stacktrace
+      - name: Sign APK and AAB
+        id: sign
+        uses: ilharp/sign-android-release@v2
+        with:
+          releaseDir: |
+            app/build/outputs/apk/release
+            app/build/outputs/bundle/release
+          signingKey: ${{ secrets.ANDROID_SIGNING_KEY }}
+          keyAlias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          buildToolsVersion: 35.0.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mareas-IHM-Pro-signed-release
+          path: ${{ steps.sign.outputs.signedFiles }}
