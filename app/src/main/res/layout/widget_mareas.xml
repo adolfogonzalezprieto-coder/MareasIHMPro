@@ -1,12 +1,1 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_root"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="14dp"
-    android:background="@drawable/widget_background">
-    <TextView android:id="@+id/widget_station" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#22D3EE" android:textStyle="bold" />
-    <TextView android:id="@+id/widget_height" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold" />
-    <TextView android:id="@+id/widget_next" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFF" />
-    <TextView android:id="@+id/widget_weather" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FBBF24" />
-</LinearLayout>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="14dp" android:background="@drawable/widget_background"><TextView android:id="@+id/widget_station" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#22D3EE" android:textStyle="bold"/><TextView android:id="@+id/widget_height" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFF" android:textSize="28sp" android:textStyle="bold"/><TextView android:id="@+id/widget_next" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FFFFFF"/><TextView android:id="@+id/widget_weather" android:layout_width="match_parent" android:layout_height="wrap_content" android:textColor="#FBBF24"/></LinearLayout>

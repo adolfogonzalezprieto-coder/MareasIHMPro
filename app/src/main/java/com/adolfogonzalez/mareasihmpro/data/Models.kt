@@ -15,6 +15,7 @@ data class MarineResponse(val current:MarineCurrent?)
 data class Point(val hour:Double,val value:Double)
 data class TideEvent(val time:String,val type:String,val height:Double,val offset:Double)
 data class AppData(
+ val latitude:Double,val longitude:Double,
  val station:String,val tideCurve:List<Point>,val tideEvents:List<TideEvent>,val tideHeight:Double,val rising:Boolean,
  val temperature:Double,val feels:Double,val temperatureCurve:List<Point>,val humidity:Int,val pressure:Double,
  val uv:Double,val uvCurve:List<Point>,val wind:Double,val windDirection:Double,val gusts:Double,val windCurve:List<Point>,val gustCurve:List<Point>,

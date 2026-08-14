@@ -39,6 +39,8 @@ class Repository {
         val height = interpolate(anchors, 0.0)
 
         AppData(
+            latitude = lat,
+            longitude = lon,
             station = "${station.puerto} (IHM ${station.id})",
             tideCurve = tideCurve,
             tideEvents = tideEvents.filter { it.offset in 0.0..24.0 },
@@ -87,15 +89,13 @@ class Repository {
 
     private fun parseDate(value: String): LocalDate? {
         val clean = value.trim().substringBefore("T").substringBefore(" ")
-        val formats = listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy", "yyyy/MM/dd")
-        return formats.firstNotNullOfOrNull { format ->
+        return listOf("yyyy-MM-dd", "dd/MM/yyyy", "dd-MM-yyyy", "yyyy/MM/dd").firstNotNullOfOrNull { format ->
             runCatching { LocalDate.parse(clean, DateTimeFormatter.ofPattern(format)) }.getOrNull()
         }
     }
 
     private fun parseTime(value: String): LocalTime? {
-        val formats = listOf("H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss")
-        return formats.firstNotNullOfOrNull { format ->
+        return listOf("H:mm", "HH:mm", "H:mm:ss", "HH:mm:ss").firstNotNullOfOrNull { format ->
             runCatching { LocalTime.parse(value.trim(), DateTimeFormatter.ofPattern(format)) }.getOrNull()
         }
     }
