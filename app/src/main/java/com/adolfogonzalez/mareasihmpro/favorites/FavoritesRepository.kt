@@ -33,7 +33,9 @@ class FavoritesRepository(private val context: Context) {
 
     val favorites: Flow<List<FavoriteLocation>> = context.favoritesDataStore.data.map { preferences ->
         val defaultId = preferences[DEFAULT_ID]
-        decode(preferences[FAVORITES] ?: "[]").map { it.copy(isDefault = it.id == defaultId) }
+        decode(preferences[FAVORITES] ?: "[]").map { favorite ->
+            favorite.copy(isDefault = favorite.id == defaultId)
+        }
     }
 
     val useGps: Flow<Boolean> = context.favoritesDataStore.data.map { preferences ->
@@ -42,22 +44,22 @@ class FavoritesRepository(private val context: Context) {
 
     suspend fun save(favorite: FavoriteLocation) {
         val list = getAll().toMutableList()
-        val index = list.indexOfFirst { it.id == favorite.id }
-        if (index >= 0) list[index] = favorite.copy(isDefault = false)
-        else list.add(favorite.copy(isDefault = false))
+        val index = list.indexOfFirst { item -> item.id == favorite.id }
+        val normalized = favorite.copy(isDefault = false)
+        if (index >= 0) list[index] = normalized else list.add(normalized)
         write(list)
         if (favorite.isDefault) setDefault(favorite.id)
     }
 
     suspend fun remove(id: String) {
-        write(getAll().filterNot { it.id == id })
+        write(getAll().filterNot { favorite -> favorite.id == id })
         context.favoritesDataStore.edit { preferences ->
             if (preferences[DEFAULT_ID] == id) preferences.remove(DEFAULT_ID)
         }
     }
 
     suspend fun setDefault(id: String) {
-        if (getAll().none { it.id == id }) return
+        if (getAll().none { favorite -> favorite.id == id }) return
         context.favoritesDataStore.edit { preferences -> preferences[DEFAULT_ID] = id }
     }
 
@@ -68,29 +70,35 @@ class FavoritesRepository(private val context: Context) {
     suspend fun getDefault(): FavoriteLocation? {
         val preferences = context.favoritesDataStore.data.first()
         val id = preferences[DEFAULT_ID] ?: return null
-        return decode(preferences[FAVORITES] ?: "[]").firstOrNull { it.id == id }?.copy(isDefault = true)
+        return decode(preferences[FAVORITES] ?: "[]")
+            .firstOrNull { favorite -> favorite.id == id }
+            ?.copy(isDefault = true)
     }
 
     suspend fun getAll(): List<FavoriteLocation> {
         val preferences = context.favoritesDataStore.data.first()
         val defaultId = preferences[DEFAULT_ID]
-        return decode(preferences[FAVORITES] ?: "[]").map { it.copy(isDefault = it.id == defaultId) }
+        return decode(preferences[FAVORITES] ?: "[]").map { favorite ->
+            favorite.copy(isDefault = favorite.id == defaultId)
+        }
     }
 
     private suspend fun write(list: List<FavoriteLocation>) {
-        context.favoritesDataStore.edit { preferences -> preferences[FAVORITES] = encode(list) }
+        context.favoritesDataStore.edit { preferences ->
+            preferences[FAVORITES] = encode(list)
+        }
     }
 
     private fun encode(list: List<FavoriteLocation>): String {
         val array = JSONArray()
         list.forEach { favorite ->
-            array.put(JSONObject().apply {
-                put("id", favorite.id)
-                put("name", favorite.name)
-                put("latitude", favorite.latitude)
-                put("longitude", favorite.longitude)
-                if (favorite.ihmStationId != null) put("ihmStationId", favorite.ihmStationId)
-            })
+            val item = JSONObject()
+            item.put("id", favorite.id)
+            item.put("name", favorite.name)
+            item.put("latitude", favorite.latitude)
+            item.put("longitude", favorite.longitude)
+            if (favorite.ihmStationId != null) item.put("ihmStationId", favorite.ihmStationId)
+            array.put(item)
         }
         return array.toString()
     }
@@ -98,16 +106,20 @@ class FavoritesRepository(private val context: Context) {
     private fun decode(json: String): List<FavoriteLocation> {
         return runCatching {
             val array = JSONArray(json)
-            (0 until array.length()).map { index ->
+            val result = mutableListOf<FavoriteLocation>()
+            for (index in 0 until array.length()) {
                 val item = array.getJSONObject(index)
-                FavoriteLocation(
-                    id = item.getString("id"),
-                    name = item.getString("name"),
-                    latitude = item.getDouble("latitude"),
-                    longitude = item.getDouble("longitude"),
-                    ihmStationId = if (item.has("ihmStationId") && !item.isNull("ihmStationId")) item.getString("ihmStationId") else null
+                result.add(
+                    FavoriteLocation(
+                        id = item.getString("id"),
+                        name = item.getString("name"),
+                        latitude = item.getDouble("latitude"),
+                        longitude = item.getDouble("longitude"),
+                        ihmStationId = if (item.has("ihmStationId") && !item.isNull("ihmStationId")) item.getString("ihmStationId") else null
+                    )
                 )
             }
+            result
         }.getOrDefault(emptyList())
     }
 }
